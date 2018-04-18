@@ -710,6 +710,12 @@ type QuerySection struct {
 	Options    []QueryOption
 }
 
+func (q *QuerySection) NormalizeName() {
+	if !strings.HasSuffix(q.Name, ".") {
+		q.Name = q.Name + "."
+	}
+}
+
 //GetContext returns q's context
 func (q *QuerySection) GetContext() string {
 	return q.Context

@@ -1,0 +1,3 @@
+# Ignore any certificate or key files since they expire and cause issues.
+*.crt
+*.key

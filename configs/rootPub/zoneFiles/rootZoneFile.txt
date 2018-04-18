@@ -1,5 +1,12 @@
 :Z: . .   [
                 :S: [
-                        :A: ch [ :deleg: ed25519 2245137bcb058f799843bb8c6df31927b547e4951142b99ae97c668b076e9d84 ]
+                        :A: ch. [
+                            :deleg: ed25519 2245137bcb058f799843bb8c6df31927b547e4951142b99ae97c668b076e9d84
+                            :redir: ns1.ch
+                            :srv: ns1.ch 2346 10
+                        ]
+                        :A: ns1.ch. [
+                            :ip6: ::1
+                        ]
                     ]
             ]

@@ -469,6 +469,7 @@ func processQuery(msgSender msgSectionSender) {
 
 //query directly answers the query if the result is cached. Otherwise it issues a new query and adds this query to the pendingQueries Cache.
 func query(query *rainslib.QuerySection, sender rainslib.ConnInfo, token rainslib.Token) {
+	query.NormalizeName()
 	log.Debug("Start processing query", "query", query)
 	zoneAndNames := getZoneAndName(query.Name)
 
@@ -643,17 +644,24 @@ func handleAddressZoneQueryResponse(zone *rainslib.AddressZoneSection, subjectAd
 	return true
 }
 
-//getZoneAndName tries to split a fully qualified name into zone and name
-func getZoneAndName(name string) (zoneAndNames []zoneAndName) {
-	//TODO CFE use also different heuristics
-	names := strings.Split(name, ".")
-	if len(names) == 1 {
-		zoneAndNames = []zoneAndName{zoneAndName{zone: ".", name: names[0]}}
-	} else {
-		zoneAndNames = []zoneAndName{zoneAndName{zone: strings.Join(names[1:], "."), name: names[0]}}
+// getZoneAndName splits a fully qualified domain name into zone and name.
+// Input MUST always be normalized and end with a '.' indicating the top of
+// the naming hierarchy, otherwise this routine will panic. The result will
+// be returned in canonical format: all labels except the bottom most will
+// be part of the zone, and the bottom most label will constitute the name.
+// This permits clean zone lookups in the caches.
+func getZoneAndName(name string) []zoneAndName {
+	if !strings.HasSuffix(name, ".") {
+		panic(fmt.Sprintf("getZoneAndName called with non '.' terminated string: %s", name))
 	}
-	log.Debug("Split into zone and name", "zone", zoneAndNames[0].zone, "name", zoneAndNames[0].name)
-	return zoneAndNames
+	if name == "." {
+		return []zoneAndName{zoneAndName{zone: ".", name: ""}}
+	}
+	names := strings.Split(name, ".")
+	if names[1] == "" {
+		return []zoneAndName{zoneAndName{zone: ".", name: names[0]}}
+	}
+	return []zoneAndName{zoneAndName{zone: strings.Join(names[1:], "."), name: names[0]}}
 }
 
 //handleShardOrZoneQueryResponse checks if section.Content contains an assertion with subjectName,

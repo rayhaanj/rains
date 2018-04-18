@@ -797,6 +797,7 @@ func (c *assertionCacheImpl) Add(a *rainslib.AssertionSection, expiration int64,
 			cacheKey:   key,
 			zone:       a.SubjectZone,
 		}
+		log.Debug("Inserting into assertionCacheImpl", "key", key, "value", cacheValue)
 		v, new := c.cache.GetOrAdd(key, &cacheValue, isInternal)
 		value := v.(*assertionCacheValue)
 		value.mux.Lock()
@@ -858,6 +859,7 @@ func (c *assertionCacheImpl) Add(a *rainslib.AssertionSection, expiration int64,
 //Get returns true and a set of assertions matching the given key if there exist some. Otherwise
 //nil and false is returned.
 func (c *assertionCacheImpl) Get(name, zone, context string, objType rainslib.ObjectType) ([]*rainslib.AssertionSection, bool) {
+	log.Debug("assertionCacheImpl.Get", "name", name, "zone", zone, "context", context, "objectType", objType)
 	v, ok := c.cache.Get(assertionCacheMapKey(name, zone, context, objType))
 	if !ok {
 		return nil, false
