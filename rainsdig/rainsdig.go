@@ -19,17 +19,19 @@ import (
 	"github.com/netsec-ethz/rains/utils/zoneFileParser"
 )
 
-//TODO add default values to description
-var revLookup = flag.String("x", "", "Reverse lookup, addr is an IPv4 address in dotted-decimal notation, or a colon-delimited IPv6 address.")
-var queryType = flag.Int("t", 3, "specifies the type for which dig issues a query.")
-var name = flag.String("q", "", "sets the query's subjectName to this value.")
-var port = flag.Uint("p", 5022, "is the port number that dig will send its queries to.")
-var serverAddr = flag.String("s", "", `is the IP address of the name server to query.
-		This can be an IPv4 address in dotted-decimal notation or an IPv6 address in colon-delimited notation.`)
-var context = flag.String("c", ".", "context specifies the context for which dig issues a query.")
-var expires = flag.Int64("exp", time.Now().Add(10*time.Second).Unix(), "expires sets the valid until value of the query.")
-var filePath = flag.String("filePath", "", "specifies a file path where the query's response is appended to")
-var insecureTLS = flag.Bool("insecureTLS", false, "when set it does not check the validity of the server's TLS certificate.")
+var (
+	revLookup  = flag.String("x", "", "Reverse lookup, addr is an IPv4 address in dotted-decimal notation, or a colon-delimited IPv6 address.")
+	queryType  = flag.Int("t", 3, "specifies the type for which dig issues a query.")
+	name       = flag.String("q", "", "sets the query's subjectName to this value.")
+	port       = flag.Uint("p", 5022, "is the port number that dig will send its queries to.")
+	serverAddr = flag.String("s", "", `is the IP address of the name server to query.
+	This can be an IPv4 address in dotted-decimal notation or an IPv6 address in colon-delimited notation.`)
+	context     = flag.String("c", ".", "context specifies the context for which dig issues a query.")
+	expires     = flag.Int64("exp", time.Now().Add(10*time.Second).Unix(), "expires sets the valid until value of the query.")
+	filePath    = flag.String("filePath", "", "specifies a file path where the query's response is appended to")
+	insecureTLS = flag.Bool("insecureTLS", false, "when set it does not check the validity of the server's TLS certificate.")
+)
+
 var queryOptions qoptFlag
 
 var msgParser rainslib.RainsMsgParser

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -779,9 +780,18 @@ type assertionCacheImpl struct {
 	mux                    sync.Mutex     //protects entriesPerAssertionMap from simultaneous access
 }
 
-//assertionCacheMapKey returns the key for assertionCacheImpl.cache based on the assertion
+// JoinNameZone merges the name and zone.
+func joinNameZone(name, zone string) string {
+	if zone == "." {
+		return fmt.Sprintf("%s%s", strings.Trim(name, "."), zone)
+	}
+	return fmt.Sprintf("%s.%s", strings.Trim(name, "."), zone)
+}
+
+// assertionCacheMapKey returns the key for assertionCacheImpl.cache based on the assertion.
+// It performs normalization of the name and zone to match the query normalization.
 func assertionCacheMapKey(name, zone, context string, oType rainslib.ObjectType) string {
-	return fmt.Sprintf("%s %s %s %d", name, zone, context, oType)
+	return fmt.Sprintf("%s %s %d", joinNameZone(name, zone), context, oType)
 }
 
 //Add adds an assertion together with an expiration time (number of seconds since 01.01.1970) to
@@ -797,7 +807,7 @@ func (c *assertionCacheImpl) Add(a *rainslib.AssertionSection, expiration int64,
 			cacheKey:   key,
 			zone:       a.SubjectZone,
 		}
-		log.Debug("Inserting into assertionCacheImpl", "key", key, "value", cacheValue)
+		log.Debug("Inserting into assertionCacheImpl", "key", key, "value", &cacheValue)
 		v, new := c.cache.GetOrAdd(key, &cacheValue, isInternal)
 		value := v.(*assertionCacheValue)
 		value.mux.Lock()
