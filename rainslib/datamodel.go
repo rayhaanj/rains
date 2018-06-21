@@ -374,6 +374,7 @@ type NotificationType int
 
 const (
 	NTHeartbeat          NotificationType = 100
+	NTCreated            NotificationType = 201 // TODO: Add to RFC.
 	NTCapHashNotKnown    NotificationType = 399
 	NTBadMessage         NotificationType = 400
 	NTRcvInconsistentMsg NotificationType = 403
@@ -398,6 +399,7 @@ const (
 	QONoProactiveCaching       QueryOption = 8
 )
 
+// TODO: Delete this thing.
 //ConnInfo contains address information about one actor of a connection of the declared type
 type ConnInfo struct {
 	//Type determines the network address type

@@ -14,13 +14,13 @@ import (
 
 //AssertionSection contains information about the assertion
 type AssertionSection struct {
-	Signatures  []Signature
-	SubjectName string
-	SubjectZone string
-	Context     string
-	Content     []Object
-	validSince  int64 //unit: the number of seconds elapsed since January 1, 1970 UTC
-	validUntil  int64 //unit: the number of seconds elapsed since January 1, 1970 UTC
+	Signatures       []Signature
+	SubjectName      string
+	SubjectZone      string
+	Context          string
+	Content          []Object
+	ValidSinceEpochS int64 //unit: the number of seconds elapsed since January 1, 1970 UTC
+	ValidUntilEpochS int64 //unit: the number of seconds elapsed since January 1, 1970 UTC
 }
 
 //AllSigs returns all assertion's signatures
@@ -75,37 +75,37 @@ func (a *AssertionSection) End() string {
 //UpdateValidity updates the validity of this assertion if the validity period is extended.
 //It makes sure that the validity is never larger than maxValidity
 func (a *AssertionSection) UpdateValidity(validSince, validUntil int64, maxValidity time.Duration) {
-	if a.validSince == 0 {
-		a.validSince = math.MaxInt64
+	if a.ValidSinceEpochS == 0 {
+		a.ValidSinceEpochS = math.MaxInt64
 	}
-	if validSince < a.validSince {
+	if validSince < a.ValidSinceEpochS {
 		if validSince > time.Now().Add(maxValidity).Unix() {
-			a.validSince = time.Now().Add(maxValidity).Unix()
-			log.Warn("newValidSince exceeded maxValidity", "oldValidSince", a.validSince,
+			a.ValidSinceEpochS = time.Now().Add(maxValidity).Unix()
+			log.Warn("newValidSince exceeded maxValidity", "oldValidSince", a.ValidSinceEpochS,
 				"newValidSince", validSince, "maxValidity", maxValidity)
 		} else {
-			a.validSince = validSince
+			a.ValidSinceEpochS = validSince
 		}
 	}
-	if validUntil > a.validUntil {
+	if validUntil > a.ValidUntilEpochS {
 		if validUntil > time.Now().Add(maxValidity).Unix() {
-			a.validUntil = time.Now().Add(maxValidity).Unix()
-			log.Warn("newValidUntil exceeded maxValidity", "oldValidSince", a.validSince,
+			a.ValidUntilEpochS = time.Now().Add(maxValidity).Unix()
+			log.Warn("newValidUntil exceeded maxValidity", "oldValidSince", a.ValidSinceEpochS,
 				"newValidSince", validSince, "maxValidity", maxValidity)
 		} else {
-			a.validUntil = validUntil
+			a.ValidUntilEpochS = validUntil
 		}
 	}
 }
 
 //ValidSince returns the earliest validSince date of all contained signatures
 func (a *AssertionSection) ValidSince() int64 {
-	return a.validSince
+	return a.ValidSinceEpochS
 }
 
 //ValidUntil returns the latest validUntil date of all contained signatures
 func (a *AssertionSection) ValidUntil() int64 {
-	return a.validUntil
+	return a.ValidUntilEpochS
 }
 
 //Hash returns a string containing all information uniquely identifying an assertion.
@@ -193,14 +193,14 @@ func extractNeededKeys(section MessageSectionWithSig, sigData map[SignatureMetaD
 
 //ShardSection contains information about the shard
 type ShardSection struct {
-	Signatures  []Signature
-	SubjectZone string
-	Context     string
-	RangeFrom   string
-	RangeTo     string
-	Content     []*AssertionSection
-	validSince  int64 //unit: the number of seconds elapsed since January 1, 1970 UTC
-	validUntil  int64 //unit: the number of seconds elapsed since January 1, 1970 UTC
+	Signatures       []Signature
+	SubjectZone      string
+	Context          string
+	RangeFrom        string
+	RangeTo          string
+	Content          []*AssertionSection
+	ValidSinceEpochS int64 //unit: the number of seconds elapsed since January 1, 1970 UTC
+	ValidUntilEpochS int64 //unit: the number of seconds elapsed since January 1, 1970 UTC
 }
 
 //AllSigs returns the shard's signatures
@@ -256,37 +256,37 @@ func (s *ShardSection) End() string {
 //UpdateValidity updates the validity of this shard if the validity period is extended.
 //It makes sure that the validity is never larger than maxValidity
 func (s *ShardSection) UpdateValidity(validSince, validUntil int64, maxValidity time.Duration) {
-	if s.validSince == 0 {
-		s.validSince = math.MaxInt64
+	if s.ValidSinceEpochS == 0 {
+		s.ValidSinceEpochS = math.MaxInt64
 	}
-	if validSince < s.validSince {
+	if validSince < s.ValidSinceEpochS {
 		if validSince > time.Now().Add(maxValidity).Unix() {
-			s.validSince = time.Now().Add(maxValidity).Unix()
-			log.Warn("newValidSince exceeded maxValidity", "oldValidSince", s.validSince,
+			s.ValidSinceEpochS = time.Now().Add(maxValidity).Unix()
+			log.Warn("newValidSince exceeded maxValidity", "oldValidSince", s.ValidSinceEpochS,
 				"newValidSince", validSince, "maxValidity", maxValidity)
 		} else {
-			s.validSince = validSince
+			s.ValidSinceEpochS = validSince
 		}
 	}
-	if validUntil > s.validUntil {
+	if validUntil > s.ValidUntilEpochS {
 		if validUntil > time.Now().Add(maxValidity).Unix() {
-			s.validUntil = time.Now().Add(maxValidity).Unix()
-			log.Warn("newValidUntil exceeded maxValidity", "oldValidSince", s.validSince,
+			s.ValidUntilEpochS = time.Now().Add(maxValidity).Unix()
+			log.Warn("newValidUntil exceeded maxValidity", "oldValidSince", s.ValidSinceEpochS,
 				"newValidSince", validSince, "maxValidity", maxValidity)
 		} else {
-			s.validUntil = validUntil
+			s.ValidUntilEpochS = validUntil
 		}
 	}
 }
 
 //ValidSince returns the earliest validSince date of all contained signatures
 func (s *ShardSection) ValidSince() int64 {
-	return s.validSince
+	return s.ValidSinceEpochS
 }
 
 //ValidUntil returns the latest validUntil date of all contained signatures
 func (s *ShardSection) ValidUntil() int64 {
-	return s.validUntil
+	return s.ValidUntilEpochS
 }
 
 //Hash returns a string containing all information uniquely identifying a shard.
@@ -421,12 +421,12 @@ func (s *ShardSection) NeededKeys(keysNeeded map[SignatureMetaData]bool) {
 
 //ZoneSection contains information about the zone
 type ZoneSection struct {
-	Signatures  []Signature
-	SubjectZone string
-	Context     string
-	Content     []MessageSectionWithSigForward
-	validSince  int64 //unit: the number of seconds elapsed since January 1, 1970 UTC
-	validUntil  int64 //unit: the number of seconds elapsed since January 1, 1970 UTC
+	Signatures       []Signature
+	SubjectZone      string
+	Context          string
+	Content          []MessageSectionWithSigForward
+	ValidSinceEpochS int64 //unit: the number of seconds elapsed since January 1, 1970 UTC
+	ValidUntilEpochS int64 //unit: the number of seconds elapsed since January 1, 1970 UTC
 }
 
 //AllSigs returns the zone's signatures
@@ -472,37 +472,37 @@ func (z *ZoneSection) End() string {
 //UpdateValidity updates the validity of this zone if the validity period is extended.
 //It makes sure that the validity is never larger than maxValidity
 func (z *ZoneSection) UpdateValidity(validSince, validUntil int64, maxValidity time.Duration) {
-	if z.validSince == 0 {
-		z.validSince = math.MaxInt64
+	if z.ValidSinceEpochS == 0 {
+		z.ValidSinceEpochS = math.MaxInt64
 	}
-	if validSince < z.validSince {
+	if validSince < z.ValidSinceEpochS {
 		if validSince > time.Now().Add(maxValidity).Unix() {
-			z.validSince = time.Now().Add(maxValidity).Unix()
-			log.Warn("newValidSince exceeded maxValidity", "oldValidSince", z.validSince,
+			z.ValidSinceEpochS = time.Now().Add(maxValidity).Unix()
+			log.Warn("newValidSince exceeded maxValidity", "oldValidSince", z.ValidSinceEpochS,
 				"newValidSince", validSince, "maxValidity", maxValidity)
 		} else {
-			z.validSince = validSince
+			z.ValidSinceEpochS = validSince
 		}
 	}
-	if validUntil > z.validUntil {
+	if validUntil > z.ValidUntilEpochS {
 		if validUntil > time.Now().Add(maxValidity).Unix() {
-			z.validUntil = time.Now().Add(maxValidity).Unix()
-			log.Warn("newValidUntil exceeded maxValidity", "oldValidSince", z.validSince,
+			z.ValidUntilEpochS = time.Now().Add(maxValidity).Unix()
+			log.Warn("newValidUntil exceeded maxValidity", "oldValidSince", z.ValidSinceEpochS,
 				"newValidSince", validSince, "maxValidity", maxValidity)
 		} else {
-			z.validUntil = validUntil
+			z.ValidUntilEpochS = validUntil
 		}
 	}
 }
 
 //ValidSince returns the earliest validSince date of all contained signatures
 func (z *ZoneSection) ValidSince() int64 {
-	return z.validSince
+	return z.ValidSinceEpochS
 }
 
 //ValidUntil returns the latest validUntil date of all contained signatures
 func (z *ZoneSection) ValidUntil() int64 {
-	return z.validUntil
+	return z.ValidUntilEpochS
 }
 
 //Hash returns a string containing all information uniquely identifying a shard.
@@ -793,12 +793,12 @@ func (q *QuerySection) String() string {
 
 //AddressAssertionSection contains information about the address assertion
 type AddressAssertionSection struct {
-	Signatures  []Signature
-	SubjectAddr *net.IPNet
-	Context     string
-	Content     []Object
-	validSince  int64
-	validUntil  int64
+	Signatures       []Signature
+	SubjectAddr      *net.IPNet
+	Context          string
+	Content          []Object
+	ValidSinceEpochS int64
+	ValidUntilEpochS int64
 }
 
 //AllSigs return the assertion's signatures
@@ -834,38 +834,38 @@ func (a *AddressAssertionSection) GetSubjectZone() string {
 //UpdateValidity updates the validity of this assertion if the validity period is extended.
 //It makes sure that the validity is never larger than maxValidity
 func (a *AddressAssertionSection) UpdateValidity(validSince, validUntil int64, maxValidity time.Duration) {
-	if a.validSince == 0 {
-		a.validSince = math.MaxInt64
+	if a.ValidSinceEpochS == 0 {
+		a.ValidSinceEpochS = math.MaxInt64
 	}
-	if validSince < a.validSince {
+	if validSince < a.ValidSinceEpochS {
 		if validSince > time.Now().Add(maxValidity).Unix() {
-			a.validSince = time.Now().Add(maxValidity).Unix()
-			log.Warn("newValidSince exceeded maxValidity", "oldValidSince", a.validSince,
+			a.ValidSinceEpochS = time.Now().Add(maxValidity).Unix()
+			log.Warn("newValidSince exceeded maxValidity", "oldValidSince", a.ValidSinceEpochS,
 				"newValidSince", validSince, "maxValidity", maxValidity)
 
 		} else {
-			a.validSince = validSince
+			a.ValidSinceEpochS = validSince
 		}
 	}
-	if validUntil > a.validUntil {
+	if validUntil > a.ValidUntilEpochS {
 		if validUntil > time.Now().Add(maxValidity).Unix() {
-			a.validUntil = time.Now().Add(maxValidity).Unix()
-			log.Warn("newValidUntil exceeded maxValidity", "oldValidSince", a.validSince,
+			a.ValidUntilEpochS = time.Now().Add(maxValidity).Unix()
+			log.Warn("newValidUntil exceeded maxValidity", "oldValidSince", a.ValidSinceEpochS,
 				"newValidSince", validSince, "maxValidity", maxValidity)
 		} else {
-			a.validUntil = validUntil
+			a.ValidUntilEpochS = validUntil
 		}
 	}
 }
 
 //ValidSince returns the earliest ValidSince date of all contained signatures
 func (a *AddressAssertionSection) ValidSince() int64 {
-	return a.validSince
+	return a.ValidSinceEpochS
 }
 
 //ValidUntil returns the latest validUntil date of all contained signatures
 func (a *AddressAssertionSection) ValidUntil() int64 {
-	return a.validUntil
+	return a.ValidUntilEpochS
 }
 
 //Hash returns a string containing all information uniquely identifying an assertion.
@@ -959,12 +959,12 @@ func (a *AddressAssertionSection) NeededKeys(keysNeeded map[SignatureMetaData]bo
 
 //AddressZoneSection contains information about the address zone
 type AddressZoneSection struct {
-	Signatures  []Signature
-	SubjectAddr *net.IPNet
-	Context     string
-	Content     []*AddressAssertionSection
-	validSince  int64
-	validUntil  int64
+	Signatures       []Signature
+	SubjectAddr      *net.IPNet
+	Context          string
+	Content          []*AddressAssertionSection
+	ValidSinceEpochS int64
+	ValidUntilEpochS int64
 }
 
 //AllSigs return the zone's signatures
@@ -1000,37 +1000,37 @@ func (z *AddressZoneSection) GetSubjectZone() string {
 //UpdateValidity updates the validity of this addressZone if the validity period is extended.
 //It makes sure that the validity is never larger than maxValidity
 func (z *AddressZoneSection) UpdateValidity(validSince, validUntil int64, maxValidity time.Duration) {
-	if z.validSince == 0 {
-		z.validSince = math.MaxInt64
+	if z.ValidSinceEpochS == 0 {
+		z.ValidSinceEpochS = math.MaxInt64
 	}
-	if validSince < z.validSince {
+	if validSince < z.ValidSinceEpochS {
 		if validSince > time.Now().Add(maxValidity).Unix() {
-			z.validSince = time.Now().Add(maxValidity).Unix()
-			log.Warn("newValidSince exceeded maxValidity", "oldValidSince", z.validSince,
+			z.ValidSinceEpochS = time.Now().Add(maxValidity).Unix()
+			log.Warn("newValidSince exceeded maxValidity", "oldValidSince", z.ValidSinceEpochS,
 				"newValidSince", validSince, "maxValidity", maxValidity)
 		} else {
-			z.validSince = validSince
+			z.ValidSinceEpochS = validSince
 		}
 	}
-	if validUntil > z.validUntil {
+	if validUntil > z.ValidUntilEpochS {
 		if validUntil > time.Now().Add(maxValidity).Unix() {
-			z.validUntil = time.Now().Add(maxValidity).Unix()
-			log.Warn("newValidUntil exceeded maxValidity", "oldValidSince", z.validSince,
+			z.ValidUntilEpochS = time.Now().Add(maxValidity).Unix()
+			log.Warn("newValidUntil exceeded maxValidity", "oldValidSince", z.ValidSinceEpochS,
 				"newValidSince", validSince, "maxValidity", maxValidity)
 		} else {
-			z.validUntil = validUntil
+			z.ValidUntilEpochS = validUntil
 		}
 	}
 }
 
 //ValidSince returns the earliest validSince date of all contained signatures
 func (z *AddressZoneSection) ValidSince() int64 {
-	return z.validSince
+	return z.ValidSinceEpochS
 }
 
 //ValidUntil returns the latest validUntil date of all contained signatures
 func (z *AddressZoneSection) ValidUntil() int64 {
-	return z.validUntil
+	return z.ValidUntilEpochS
 }
 
 //Hash returns a string containing all information uniquely identifying a shard.

@@ -38,6 +38,30 @@ func initQueuesAndWorkers(done chan bool) error {
 	return nil
 }
 
+func deliverCBOR(msg *rainslib.RainsMessage, sender rainslib.ConnInfo) {
+	// TODO: Check length of message.
+	processCapability(msg.Capabilities, sender, msg.Token)
+
+	//handle message content
+	for _, m := range msg.Content {
+		switch m := m.(type) {
+		case *rainslib.AssertionSection, *rainslib.ShardSection, *rainslib.ZoneSection, *rainslib.AddressAssertionSection, *rainslib.AddressZoneSection:
+			if !isZoneBlacklisted(m.(rainslib.MessageSectionWithSig).GetSubjectZone()) {
+				addMsgSectionToQueue(m, msg.Token, sender)
+			}
+		case *rainslib.QuerySection, *rainslib.AddressQuerySection:
+			log.Debug(fmt.Sprintf("add %T to normal queue", m))
+			normalChannel <- msgSectionSender{Sender: sender, Section: m, Token: msg.Token}
+		case *rainslib.NotificationSection:
+			log.Debug("Add notification to notification queue", "token", msg.Token)
+			notificationChannel <- msgSectionSender{Sender: sender, Section: m, Token: msg.Token}
+		default:
+			log.Warn(fmt.Sprintf("unsupported message section type %T", m))
+			return
+		}
+	}
+}
+
 //deliver pushes all incoming messages to the prio or normal channel.
 //A message is added to the priority channel if it is the response to a non-expired delegation query
 func deliver(message []byte, sender rainslib.ConnInfo) {

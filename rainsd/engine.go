@@ -9,16 +9,12 @@ import (
 	log "github.com/inconshreveable/log15"
 
 	"github.com/netsec-ethz/rains/rainslib"
-	"github.com/shirou/gopsutil/cpu"
 )
-
-//enoughSystemRessources returns true if the server has enough resources to make consistency checks
-var enoughSystemRessources bool
 
 //initEngine initialized the engine, which processes valid sections and queries.
 //It spawns a goroutine which periodically goes through the cache and removes outdated entries, see reapEngine()
 func initEngine() {
-	go measureSystemRessources()
+	// TODO: reapEngine does not actually exist.
 }
 
 //assert checks the consistency of the incoming section with sections in the cache.
@@ -27,7 +23,7 @@ func initEngine() {
 //rains signature on the message
 func assert(ss sectionWithSigSender, isAuthoritative bool) {
 	log.Debug("Adding assertion to cache", "assertion", ss)
-	if enoughSystemRessources && sectionIsInconsistent(ss.Section) {
+	if sectionIsInconsistent(ss.Section) {
 		log.Warn("section is inconsistent with cached elements.", "section", ss.Section)
 		sendNotificationMsg(ss.Token, ss.Sender, rainslib.NTRcvInconsistentMsg, "")
 		return
@@ -35,6 +31,7 @@ func assert(ss sectionWithSigSender, isAuthoritative bool) {
 	addSectionToCache(ss.Section, isAuthoritative)
 	pendingKeysCallback(ss)
 	pendingQueriesCallback(ss)
+	sendNotificationMsg(ss.Token, ss.Sender, rainslib.NTCreated, "")
 	log.Info(fmt.Sprintf("Finished handling %T", ss.Section), "section", ss.Section)
 }
 
@@ -786,17 +783,4 @@ func containedAssertionQueryResponse(assertions []*rainslib.AssertionSection, su
 		}
 	}
 	return false, false
-}
-
-//measureSystemRessources measures current cpu usage and updates enoughSystemRessources
-//TODO CFE make it configurable, experiment with different sampling rates
-func measureSystemRessources() {
-	for {
-		cpuStat, _ := cpu.Percent(time.Second/10, false)
-		enoughSystemRessources = cpuStat[0] < 75
-		if !enoughSystemRessources {
-			log.Warn("Not enough system resources to check for consistency")
-		}
-		time.Sleep(time.Second * 10)
-	}
 }

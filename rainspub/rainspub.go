@@ -2,8 +2,8 @@ package rainspub
 
 import (
 	"crypto/tls"
-	"encoding/hex"
 	"errors"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -13,13 +13,19 @@ import (
 
 	log "github.com/inconshreveable/log15"
 
+	"github.com/britram/borat"
 	"github.com/netsec-ethz/rains/rainsSiglib"
 	"github.com/netsec-ethz/rains/rainslib"
 	"github.com/netsec-ethz/rains/utils/protoParser"
 	"github.com/netsec-ethz/rains/utils/zoneFileParser"
+
+	"golang.org/x/crypto/ed25519"
 )
 
-var msgFramer rainslib.MsgFramer
+var (
+	replyTimeout = flag.Duration("reply_timeout", 10*time.Second, "Timeout for response from server.")
+	insecureTLS  = flag.Bool("insecureTLS", true, "Whether to verify trust of peer certificate in TLS.")
+)
 
 //InitRainspub initializes rainspub
 func InitRainspub(configPath string) error {
@@ -90,15 +96,12 @@ func PublishInformation() error {
 		log.Warn("Was not able to sign zone.", "error", err)
 		return err
 	}
-
-	msg, err := createRainsMessage(zone)
-	if err != nil {
-		log.Warn("Was not able to parse the zone to a rains message.", "error", err)
-		return err
+	msg := rainslib.RainsMessage{
+		Token:        rainslib.GenerateToken(),
+		Content:      []rainslib.MessageSection{zone},
+		Capabilities: []rainslib.Capability{},
 	}
-
-	err = sendMsg(msg, len(assertions), len(zone.Content))
-	if err != nil {
+	if err = sendMsg(msg); err != nil {
 		log.Warn("Was not able to send signed zone.", "error", err)
 		return err
 	}
@@ -259,22 +262,25 @@ func signAssertions(assertions []*rainslib.AssertionSection, keyAlgo rainslib.Si
 	return nil
 }
 
-//createRainsMessage creates a rainsMessage containing the given zone and return the byte representation of this rainsMessage ready to send out.
-func createRainsMessage(zone *rainslib.ZoneSection) ([]byte, error) {
-	msg := rainslib.RainsMessage{Token: rainslib.GenerateToken(), Content: []rainslib.MessageSection{zone}} //no capabilities
-	byteMsg, err := msgParser.Encode(msg)
-	if err != nil {
-		return []byte{}, err
-	}
-	return byteMsg, nil
+func configureWriter(w *borat.CBORWriter) {
+	w.RegisterCBORTag(314, rainslib.PublicKey{})
+	w.RegisterCBORTag(315, rainslib.ServiceInfo{})
+	w.RegisterCBORTag(316, rainslib.ZoneSection{})
+	w.RegisterCBORTag(317, rainslib.ShardSection{})
+	w.RegisterCBORTag(318, rainslib.AssertionSection{})
+	w.RegisterCBORTag(319, rainslib.Object{})
+	w.RegisterCBORTag(320, uint8(0))
+	w.RegisterCBORTag(321, rainslib.Signature{})
+	w.RegisterCBORTag(322, string(""))
+	w.RegisterCBORTag(323, ed25519.PublicKey{})
+	w.RegisterCBORTag(324, []byte{})
 }
 
 //sendMsg sends the given zone to rains servers specified in the configuration
-func sendMsg(msg []byte, assertionCount, shardCount int) error {
-	//TODO CFE use certificate for tls
-	var conns []net.Conn
+func sendMsg(msg rainslib.RainsMessage) error {
+	// TODO have roots of trust specified so verification is possible.
 	conf := &tls.Config{
-		InsecureSkipVerify: true,
+		InsecureSkipVerify: *insecureTLS,
 	}
 	for _, server := range config.ServerAddresses {
 		switch server.Type {
@@ -284,83 +290,49 @@ func sendMsg(msg []byte, assertionCount, shardCount int) error {
 				log.Error("Was not able to establish a connection.", "server", server, "error", err)
 				continue
 			}
-			conns = append(conns, conn)
-			msgFramer = new(protoParser.ProtoParserAndFramer)
-			msgFramer.InitStreams(conn, conn)
-			token, _ := msgParser.Token(msg)
-			go listen(conn, token)
-			err = msgFramer.Frame(msg)
-			if err != nil {
-				conn.Close()
-				return err
+			defer conn.Close()
+			fmt.Printf("writing message: %+v", msg)
+			writer := borat.NewCBORWriter(conn)
+			configureWriter(writer)
+			if err := writer.Marshal(msg); err != nil {
+				return fmt.Errorf("failed to marshal message for sending: %v", err)
 			}
-			log.Info("Published information.", "serverAddresses", server.String(), "#Assertions",
-				assertionCount, "#Shards", shardCount)
+			done := make(chan struct{})
+			ec := make(chan error)
+			go awaitResponse(conn, msg.Token, done, ec)
+			select {
+			case <-done:
+				log.Info("Successfuly published zone data", "serverAddress", server.String())
+			case err := <-ec:
+				return fmt.Errorf("failed to publsh to %q: %v", server.String(), err)
+			case <-time.After(*replyTimeout):
+				return fmt.Errorf("timeout publishing to host: %v", server.String())
+			}
 		default:
 			return fmt.Errorf("unsupported connection information type. actual=%v", server.Type)
 		}
 	}
-	time.Sleep(2 * time.Second)
-	for _, conn := range conns {
-		conn.Close()
-		log.Debug("connection closed")
-	}
 	return nil
 }
 
-//listen receives incoming messages. If the message's token matches the query's token, it handles
-//the response.
-func listen(conn net.Conn, token rainslib.Token) {
-	for msgFramer.DeFrame() {
-		_, err := msgParser.Token(msgFramer.Data())
-		if err != nil {
-			log.Warn("Was not able to extract the token", "message", hex.EncodeToString(msgFramer.Data()), "error", err)
-			continue
-		}
-		msg, err := msgParser.Decode(msgFramer.Data())
-		if err != nil {
-			log.Warn("Was not able to decode received message", "message", hex.EncodeToString(msgFramer.Data()), "error", err)
-			continue
-		}
-		//Rainspub only accepts notification messages in response to published information.
-		if n, ok := msg.Content[0].(*rainslib.NotificationSection); ok && n.Token == token {
-			if handleResponse(conn, msg.Content[0].(*rainslib.NotificationSection)) {
-				conn.Close()
-				return
-			}
-			continue
-		}
-		log.Debug("Token of sent message does not match the token of the received message",
-			"messageToken", token, "recvToken", msg.Token)
+func awaitResponse(conn net.Conn, token rainslib.Token, done chan struct{}, ec chan error) {
+	var msg rainslib.RainsMessage
+	reader := borat.NewCBORReader(conn)
+	if err := reader.Unmarshal(&msg); err != nil {
+		ec <- fmt.Errorf("failed to unmarshal response CBOR: %v", err)
 	}
-}
-
-//handleResponse handles the received notification message and returns true if the connection can
-//be closed.
-func handleResponse(conn net.Conn, n *rainslib.NotificationSection) bool {
-	switch n.Type {
-	case rainslib.NTHeartbeat, rainslib.NTNoAssertionsExist, rainslib.NTNoAssertionAvail:
-	//nop
-	case rainslib.NTCapHashNotKnown:
-	//TODO CFE send back the whole capability list in an empty message
-	case rainslib.NTBadMessage:
-		log.Error("Sent msg was malformed", "data", n.Data)
-	case rainslib.NTRcvInconsistentMsg:
-		log.Error("Sent msg was inconsistent", "data", n.Data)
-	case rainslib.NTMsgTooLarge:
-		log.Error("Sent msg was too large", "data", n.Data)
-		//What should we do in this case. apparently it is not possible to send a zone because
-		//it is too large. send shards instead?
-	case rainslib.NTUnspecServerErr:
-		log.Error("Unspecified error of other server", "data", n.Data)
-		//TODO CFE resend?
-	case rainslib.NTServerNotCapable:
-		log.Error("Other server was not capable", "data", n.Data)
-		//TODO CFE when can this occur?
-	default:
-		log.Error("Received non existing notification type")
+	if msg.Token != token {
+		ec <- fmt.Errorf("response token mismatch, want: %v, got: %v", token, msg.Token)
 	}
-	return false
+	if n, ok := msg.Content[0].(*rainslib.NotificationSection); ok {
+		if n.Type == rainslib.NTCreated {
+			done <- struct{}{}
+			return
+		}
+		ec <- fmt.Errorf("expected NofitifcationType of Created but got %T: %v", n.Type, n.String())
+	} else {
+		ec <- fmt.Errorf("expected response of type NotificationSection but got %T: %v", msg.Content[0], msg.Content[0])
+	}
 }
 
 //capabilityIsHash returns true if capabilities are represented as a hash.

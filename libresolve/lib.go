@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/britram/borat"
 	"github.com/golang/glog"
 	"github.com/netsec-ethz/rains/rainslib"
 	"github.com/netsec-ethz/rains/utils/protoParser"
@@ -64,37 +65,6 @@ func (r *Resolver) nameToQuery(name, context string, expTime int64, opts []rains
 	return rainslib.NewQueryMessage(name, context, expTime, types, opts, rainslib.GenerateToken())
 }
 
-// waitResponse listens on the given parserframer until a message with the
-// specified token is received. If there is an error, it will be sent on
-// the error channel.
-func (r *Resolver) waitResponse(pf protoParser.ProtoParserAndFramer, token rainslib.Token, done chan *rainslib.RainsMessage, ec chan error) {
-	for pf.DeFrame() {
-		tok, err := pf.Token(pf.Data())
-		if err != nil {
-			ec <- fmt.Errorf("failed to get token from message: %v", err)
-			if r.FailFast {
-				return
-			}
-		}
-		msg, err := pf.Decode(pf.Data())
-		if err != nil {
-			ec <- fmt.Errorf("failed to parse bytes to RAINS message: %v", err)
-			if r.FailFast {
-				return
-			}
-		}
-		if tok != token {
-			ec <- fmt.Errorf("expected message with token %v but got %v", token, tok)
-			if r.FailFast {
-				return
-			}
-		} else {
-			done <- &msg
-			return
-		}
-	}
-}
-
 func (r *Resolver) forwardQuery(q rainslib.RainsMessage) (*rainslib.RainsMessage, error) {
 	if len(r.Forwarders) == 0 {
 		return nil, errors.New("forwarders must be specified to use this mode.")
@@ -112,18 +82,22 @@ func (r *Resolver) forwardQuery(q rainslib.RainsMessage) (*rainslib.RainsMessage
 			continue
 		}
 		defer conn.Close()
-		pf := protoParser.ProtoParserAndFramer{}
-		pf.InitStreams(conn, conn)
-		b, err := pf.Encode(q)
-		if err != nil {
-			return nil, fmt.Errorf("failed to encode message: %v", err)
+		w := borat.NewCBORWriter(conn)
+		if err := w.Marshal(&q); err != nil {
+			return nil, fmt.Errorf("failed to marshal message to send: %v", err)
 		}
-		if err := pf.Frame(b); err != nil {
-			return nil, fmt.Errorf("failed to frame message: %v", err)
-		}
+
 		done := make(chan *rainslib.RainsMessage)
 		ec := make(chan error)
-		go r.waitResponse(pf, q.Token, done, ec)
+		go func() {
+			r := borat.NewCBORReader(conn)
+			var resp rainslib.RainsMessage
+			if err := r.Unmarshal(&resp); err != nil {
+				ec <- fmt.Errorf("got error when trying to unmarshal response: %v", err)
+				return
+			}
+			done <- &resp
+		}()
 		select {
 		case msg := <-done:
 			return msg, nil
@@ -178,9 +152,18 @@ func (r *Resolver) recursiveResolve(name, context string) (*rainslib.RainsMessag
 		if err := pf.Frame(b); err != nil {
 			return nil, fmt.Errorf("failed to frame message: %v", err)
 		}
+
 		done := make(chan *rainslib.RainsMessage)
 		ec := make(chan error)
-		go r.waitResponse(pf, q.Token, done, ec)
+		go func() {
+			r := borat.NewCBORReader(conn)
+			var resp rainslib.RainsMessage
+			if err := r.Unmarshal(&resp); err != nil {
+				ec <- fmt.Errorf("got error when trying to unmarshal response: %v", err)
+				return
+			}
+			done <- &resp
+		}()
 		select {
 		case msg := <-done:
 			resp = msg

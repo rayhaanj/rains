@@ -7,19 +7,22 @@ package rainsd
 import (
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"net"
 	"time"
 
 	"github.com/golang/glog"
 	log "github.com/inconshreveable/log15"
 
+	"github.com/britram/borat"
 	"github.com/netsec-ethz/rains/rainslib"
 	"github.com/netsec-ethz/rains/utils/protoParser"
+	"golang.org/x/crypto/ed25519"
 )
 
 //sendTo sends message to the specified receiver.
-func sendTo(message rainslib.RainsMessage, receiver rainslib.ConnInfo, retries, backoffMilliSeconds int) (err error) {
-	var framer rainslib.MsgFramer
+func sendTo(message rainslib.RainsMessage, receiver rainslib.ConnInfo, retries, backoffMilliSeconds int) error {
+	var err error
 
 	conns, ok := connCache.GetConnection(receiver)
 	if !ok {
@@ -40,23 +43,17 @@ func sendTo(message rainslib.RainsMessage, receiver rainslib.ConnInfo, retries, 
 		//add capabilities to message
 		message.Capabilities = []rainslib.Capability{rainslib.Capability(capabilityHash)}
 	}
-	msg, err := msgParser.Encode(message)
-	if err != nil {
-		log.Warn("Cannot encode message", "message", message, "error", err)
-		return err
-	}
-	framer = new(protoParser.ProtoParserAndFramer)
+
 	for _, conn := range conns {
-		framer.InitStreams(nil, conn)
-		err = framer.Frame(msg)
-		if err != nil {
-			log.Warn("Was not able to frame or send the message", "Error", err, "connections", conns, "receiver", receiver)
-			connCache.CloseAndRemoveConnection(conn)
+		writer := borat.NewCBORWriter(conn)
+		if err = writer.Marshal(&message); err != nil {
+			glog.Warningf("failed to marshal message to conn: %v", err)
 			continue
 		}
-		log.Debug("Send successful", "receiver", receiver)
+		glog.Infof("sent response to peer: %v", conn.RemoteAddr())
 		return nil
 	}
+
 	if retries > 0 {
 		time.Sleep(time.Duration(backoffMilliSeconds) * time.Millisecond)
 		return sendTo(message, receiver, retries-1, 2*backoffMilliSeconds)
@@ -76,6 +73,20 @@ func createConnection(receiver rainslib.ConnInfo) (net.Conn, error) {
 	default:
 		return nil, errors.New("No matching type found for Connection info")
 	}
+}
+
+func configureReader(r *borat.CBORReader) {
+	r.RegisterCBORTag(314, rainslib.PublicKey{})
+	r.RegisterCBORTag(315, rainslib.ServiceInfo{})
+	r.RegisterCBORTag(316, rainslib.ZoneSection{})
+	r.RegisterCBORTag(317, rainslib.ShardSection{})
+	r.RegisterCBORTag(318, rainslib.AssertionSection{})
+	r.RegisterCBORTag(319, rainslib.Object{})
+	r.RegisterCBORTag(320, uint8(0))
+	r.RegisterCBORTag(321, rainslib.Signature{})
+	r.RegisterCBORTag(322, string(""))
+	r.RegisterCBORTag(323, ed25519.PublicKey{})
+	r.RegisterCBORTag(324, []byte{})
 }
 
 //Listen listens for incoming connections and creates a go routine for each connection.
@@ -103,15 +114,27 @@ func Listen() {
 				continue
 			}
 			connCache.AddConnection(conn)
-			if tcpAddr, ok := conn.RemoteAddr().(*net.TCPAddr); ok {
-				go handleConnection(conn, rainslib.ConnInfo{Type: rainslib.TCP, TCPAddr: tcpAddr})
-			} else {
-				log.Warn("Type assertion failed. Expected *net.TCPAddr", "addr", conn.RemoteAddr())
-			}
+			go handleConnCBOR(conn)
 		}
 	default:
 		log.Warn("Unsupported Network address type.")
 	}
+}
+
+func handleConnCBOR(conn net.Conn) {
+	var msg rainslib.RainsMessage
+	reader := borat.NewCBORReader(conn)
+	configureReader(reader)
+	for {
+		log.Info("waiting for input from client") // TODO: delete after testing.
+		if err := reader.Unmarshal(&msg); err != nil {
+			log.Warn(fmt.Sprintf("failed to read from client: %v", err))
+			break
+		}
+		fmt.Printf("received message: %+v\n", msg)
+		deliverCBOR(&msg, rainslib.ConnInfo{Type: rainslib.TCP, TCPAddr: conn.RemoteAddr().(*net.TCPAddr)})
+	}
+	connCache.CloseAndRemoveConnection(conn)
 }
 
 //handleConnection deframes all incoming messages on conn and passes them to the inbox along with the dstAddr
