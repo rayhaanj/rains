@@ -13,7 +13,6 @@ import (
 	"github.com/golang/glog"
 	"github.com/netsec-ethz/rains/rainslib"
 	"github.com/netsec-ethz/rains/utils/cbor"
-	"github.com/netsec-ethz/rains/utils/protoParser"
 )
 
 type ResolutionMode int
@@ -90,7 +89,6 @@ func (r *Resolver) forwardQuery(q rainslib.RainsMessage) (*rainslib.RainsMessage
 		if err := w.Marshal(&q); err != nil {
 			return nil, fmt.Errorf("failed to marshal message to send: %v", err)
 		}
-
 		done := make(chan *rainslib.RainsMessage)
 		ec := make(chan error)
 		go func() {
@@ -149,22 +147,24 @@ func (r *Resolver) recursiveResolve(name, context string) (*rainslib.RainsMessag
 			return nil, fmt.Errorf("failed to connect to resolver: %v", err)
 		}
 		defer conn.Close()
-		pf := protoParser.ProtoParserAndFramer{}
-		pf.InitStreams(conn, conn)
+
 		q := r.nameToQuery(name, context, time.Now().Add(15*time.Second).Unix(), []rainslib.QueryOption{})
 		glog.Infof("query is: %v", q)
-		b, err := pf.Encode(q)
-		if err != nil {
-			return nil, fmt.Errorf("failed to encode query: %v", err)
+		writer := borat.NewCBORWriter(conn)
+		if err := cbor.ConfigureWriter(writer); err != nil {
+			return nil, fmt.Errorf("failed to configure writer: %v", err)
 		}
-		if err := pf.Frame(b); err != nil {
-			return nil, fmt.Errorf("failed to frame message: %v", err)
+		if err := writer.Marshal(&q); err != nil {
+			return nil, fmt.Errorf("failed to marshal query: %v", err)
 		}
-
 		done := make(chan *rainslib.RainsMessage)
 		ec := make(chan error)
 		go func() {
 			r := borat.NewCBORReader(conn)
+			if err := cbor.ConfigureReader(r); err != nil {
+				ec <- fmt.Errorf("failed to configure reader: %v", err)
+				return
+			}
 			var resp rainslib.RainsMessage
 			if err := r.Unmarshal(&resp); err != nil {
 				ec <- fmt.Errorf("got error when trying to unmarshal response: %v", err)
