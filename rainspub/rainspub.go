@@ -262,6 +262,22 @@ func signAssertions(assertions []*rainslib.AssertionSection, keyAlgo rainslib.Si
 	return nil
 }
 
+func configureReader(r *borat.CBORReader) {
+	r.RegisterCBORTag(314, rainslib.PublicKey{})
+	r.RegisterCBORTag(315, rainslib.ServiceInfo{})
+	r.RegisterCBORTag(316, rainslib.ZoneSection{})
+	r.RegisterCBORTag(317, rainslib.ShardSection{})
+	r.RegisterCBORTag(318, rainslib.AssertionSection{})
+	r.RegisterCBORTag(319, rainslib.Object{})
+	r.RegisterCBORTag(320, uint8(0))
+	r.RegisterCBORTag(321, rainslib.Signature{})
+	r.RegisterCBORTag(322, string(""))
+	r.RegisterCBORTag(323, ed25519.PublicKey{})
+	r.RegisterCBORTag(324, []byte{})
+	r.RegisterCBORTag(325, rainslib.NotificationSection{})
+	r.RegisterCBORTag(326, rainslib.ObjectType(0))
+}
+
 func configureWriter(w *borat.CBORWriter) {
 	w.RegisterCBORTag(314, rainslib.PublicKey{})
 	w.RegisterCBORTag(315, rainslib.ServiceInfo{})
@@ -318,13 +334,14 @@ func sendMsg(msg rainslib.RainsMessage) error {
 func awaitResponse(conn net.Conn, token rainslib.Token, done chan struct{}, ec chan error) {
 	var msg rainslib.RainsMessage
 	reader := borat.NewCBORReader(conn)
+	configureReader(reader)
 	if err := reader.Unmarshal(&msg); err != nil {
 		ec <- fmt.Errorf("failed to unmarshal response CBOR: %v", err)
 	}
-	if msg.Token != token {
-		ec <- fmt.Errorf("response token mismatch, want: %v, got: %v", token, msg.Token)
-	}
 	if n, ok := msg.Content[0].(*rainslib.NotificationSection); ok {
+		if n.Token != token {
+			ec <- fmt.Errorf("response token mismatch, want %v, got: %v", token, n.Token)
+		}
 		if n.Type == rainslib.NTCreated {
 			done <- struct{}{}
 			return
