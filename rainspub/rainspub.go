@@ -16,10 +16,9 @@ import (
 	"github.com/britram/borat"
 	"github.com/netsec-ethz/rains/rainsSiglib"
 	"github.com/netsec-ethz/rains/rainslib"
+	"github.com/netsec-ethz/rains/utils/cbor"
 	"github.com/netsec-ethz/rains/utils/protoParser"
 	"github.com/netsec-ethz/rains/utils/zoneFileParser"
-
-	"golang.org/x/crypto/ed25519"
 )
 
 var (
@@ -262,36 +261,6 @@ func signAssertions(assertions []*rainslib.AssertionSection, keyAlgo rainslib.Si
 	return nil
 }
 
-func configureReader(r *borat.CBORReader) {
-	r.RegisterCBORTag(314, rainslib.PublicKey{})
-	r.RegisterCBORTag(315, rainslib.ServiceInfo{})
-	r.RegisterCBORTag(316, rainslib.ZoneSection{})
-	r.RegisterCBORTag(317, rainslib.ShardSection{})
-	r.RegisterCBORTag(318, rainslib.AssertionSection{})
-	r.RegisterCBORTag(319, rainslib.Object{})
-	r.RegisterCBORTag(320, uint8(0))
-	r.RegisterCBORTag(321, rainslib.Signature{})
-	r.RegisterCBORTag(322, string(""))
-	r.RegisterCBORTag(323, ed25519.PublicKey{})
-	r.RegisterCBORTag(324, []byte{})
-	r.RegisterCBORTag(325, rainslib.NotificationSection{})
-	r.RegisterCBORTag(326, rainslib.ObjectType(0))
-}
-
-func configureWriter(w *borat.CBORWriter) {
-	w.RegisterCBORTag(314, rainslib.PublicKey{})
-	w.RegisterCBORTag(315, rainslib.ServiceInfo{})
-	w.RegisterCBORTag(316, rainslib.ZoneSection{})
-	w.RegisterCBORTag(317, rainslib.ShardSection{})
-	w.RegisterCBORTag(318, rainslib.AssertionSection{})
-	w.RegisterCBORTag(319, rainslib.Object{})
-	w.RegisterCBORTag(320, uint8(0))
-	w.RegisterCBORTag(321, rainslib.Signature{})
-	w.RegisterCBORTag(322, string(""))
-	w.RegisterCBORTag(323, ed25519.PublicKey{})
-	w.RegisterCBORTag(324, []byte{})
-}
-
 //sendMsg sends the given zone to rains servers specified in the configuration
 func sendMsg(msg rainslib.RainsMessage) error {
 	// TODO have roots of trust specified so verification is possible.
@@ -309,7 +278,9 @@ func sendMsg(msg rainslib.RainsMessage) error {
 			defer conn.Close()
 			fmt.Printf("writing message: %+v", msg)
 			writer := borat.NewCBORWriter(conn)
-			configureWriter(writer)
+			if err := cbor.ConfigureWriter(writer); err != nil {
+				return fmt.Errorf("failed to configure CBOR writer: %v", err)
+			}
 			if err := writer.Marshal(msg); err != nil {
 				return fmt.Errorf("failed to marshal message for sending: %v", err)
 			}
@@ -334,7 +305,9 @@ func sendMsg(msg rainslib.RainsMessage) error {
 func awaitResponse(conn net.Conn, token rainslib.Token, done chan struct{}, ec chan error) {
 	var msg rainslib.RainsMessage
 	reader := borat.NewCBORReader(conn)
-	configureReader(reader)
+	if err := cbor.ConfigureReader(reader); err != nil {
+		ec <- fmt.Errorf("failed to configure reader: %v", err)
+	}
 	if err := reader.Unmarshal(&msg); err != nil {
 		ec <- fmt.Errorf("failed to unmarshal response CBOR: %v", err)
 	}

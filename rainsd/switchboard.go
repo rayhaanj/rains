@@ -16,8 +16,8 @@ import (
 
 	"github.com/britram/borat"
 	"github.com/netsec-ethz/rains/rainslib"
+	"github.com/netsec-ethz/rains/utils/cbor"
 	"github.com/netsec-ethz/rains/utils/protoParser"
-	"golang.org/x/crypto/ed25519"
 )
 
 //sendTo sends message to the specified receiver.
@@ -47,12 +47,13 @@ func sendTo(message rainslib.RainsMessage, receiver rainslib.ConnInfo, retries, 
 
 	for _, conn := range conns {
 		writer := borat.NewCBORWriter(conn)
-		configureWriter(writer)
+		if err := cbor.ConfigureWriter(writer); err != nil {
+			return fmt.Errorf("failed to configure CBOR writer: %v", err)
+		}
 		if err = writer.Marshal(&message); err != nil {
 			log.Warn(fmt.Sprintf("failed to marshal message to conn: %v", err))
 			continue
 		}
-		writer.Debug()
 		glog.Infof("sent response to peer: %v", conn.RemoteAddr())
 		return nil
 	}
@@ -76,38 +77,6 @@ func createConnection(receiver rainslib.ConnInfo) (net.Conn, error) {
 	default:
 		return nil, errors.New("No matching type found for Connection info")
 	}
-}
-
-func configureWriter(r *borat.CBORWriter) {
-	r.RegisterCBORTag(314, rainslib.PublicKey{})
-	r.RegisterCBORTag(315, rainslib.ServiceInfo{})
-	r.RegisterCBORTag(316, rainslib.ZoneSection{})
-	r.RegisterCBORTag(317, rainslib.ShardSection{})
-	r.RegisterCBORTag(318, rainslib.AssertionSection{})
-	r.RegisterCBORTag(319, rainslib.Object{})
-	r.RegisterCBORTag(320, uint8(0))
-	r.RegisterCBORTag(321, rainslib.Signature{})
-	r.RegisterCBORTag(322, string(""))
-	r.RegisterCBORTag(323, ed25519.PublicKey{})
-	r.RegisterCBORTag(324, []byte{})
-	r.RegisterCBORTag(325, rainslib.NotificationSection{})
-	r.RegisterCBORTag(326, rainslib.ObjectType(0))
-}
-
-func configureReader(r *borat.CBORReader) {
-	r.RegisterCBORTag(314, rainslib.PublicKey{})
-	r.RegisterCBORTag(315, rainslib.ServiceInfo{})
-	r.RegisterCBORTag(316, rainslib.ZoneSection{})
-	r.RegisterCBORTag(317, rainslib.ShardSection{})
-	r.RegisterCBORTag(318, rainslib.AssertionSection{})
-	r.RegisterCBORTag(319, rainslib.Object{})
-	r.RegisterCBORTag(320, uint8(0))
-	r.RegisterCBORTag(321, rainslib.Signature{})
-	r.RegisterCBORTag(322, string(""))
-	r.RegisterCBORTag(323, ed25519.PublicKey{})
-	r.RegisterCBORTag(324, []byte{})
-	r.RegisterCBORTag(325, &rainslib.NotificationSection{})
-	r.RegisterCBORTag(326, rainslib.ObjectType(0))
 }
 
 //Listen listens for incoming connections and creates a go routine for each connection.
@@ -145,7 +114,9 @@ func Listen() {
 func handleConnCBOR(conn net.Conn) {
 	var msg rainslib.RainsMessage
 	reader := borat.NewCBORReader(conn)
-	configureReader(reader)
+	if err := cbor.ConfigureReader(reader); err != nil {
+		log.Warn(fmt.Sprintf("failed to configure reader to read from client: %v", err))
+	}
 	for {
 		log.Info("waiting for input from client") // TODO: delete after testing.
 		if err := reader.Unmarshal(&msg); err != nil {

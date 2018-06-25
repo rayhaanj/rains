@@ -12,6 +12,7 @@ import (
 	"github.com/britram/borat"
 	"github.com/golang/glog"
 	"github.com/netsec-ethz/rains/rainslib"
+	"github.com/netsec-ethz/rains/utils/cbor"
 	"github.com/netsec-ethz/rains/utils/protoParser"
 )
 
@@ -67,7 +68,7 @@ func (r *Resolver) nameToQuery(name, context string, expTime int64, opts []rains
 
 func (r *Resolver) forwardQuery(q rainslib.RainsMessage) (*rainslib.RainsMessage, error) {
 	if len(r.Forwarders) == 0 {
-		return nil, errors.New("forwarders must be specified to use this mode.")
+		return nil, errors.New("forwarders must be specified to use this mode")
 	}
 	errs := make([]error, 0)
 	for i, forwarder := range r.Forwarders {
@@ -83,6 +84,9 @@ func (r *Resolver) forwardQuery(q rainslib.RainsMessage) (*rainslib.RainsMessage
 		}
 		defer conn.Close()
 		w := borat.NewCBORWriter(conn)
+		if err := cbor.ConfigureWriter(w); err != nil {
+			return nil, fmt.Errorf("failed to configure writer: %v", err)
+		}
 		if err := w.Marshal(&q); err != nil {
 			return nil, fmt.Errorf("failed to marshal message to send: %v", err)
 		}
@@ -91,6 +95,10 @@ func (r *Resolver) forwardQuery(q rainslib.RainsMessage) (*rainslib.RainsMessage
 		ec := make(chan error)
 		go func() {
 			r := borat.NewCBORReader(conn)
+			if err := cbor.ConfigureReader(r); err != nil {
+				ec <- fmt.Errorf("failed to configure reader: %v", err)
+				return
+			}
 			var resp rainslib.RainsMessage
 			if err := r.Unmarshal(&resp); err != nil {
 				ec <- fmt.Errorf("got error when trying to unmarshal response: %v", err)
